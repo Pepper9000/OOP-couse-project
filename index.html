@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Wardrobe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="side">
+    <h1 class="brand">Smart Wardrobe</h1>
+    <nav id="nav">
+      <button data-view="dashboard">Dashboard</button>
+      <button data-view="wardrobe">Wardrobe</button>
+      <button data-view="add">Add clothing</button>
+      <button data-view="recommend">Outfits</button>
+    </nav>
+    <p id="health" class="health">Checking backend...</p>
+  </aside>
+
+  <main>
+    <section id="view-dashboard" hidden>
+      <h2>Dashboard</h2>
+      <div class="stats" id="stats"></div>
+      <div class="row-head"><h3>Recently added</h3></div>
+      <div id="recent" class="grid"></div>
+      <div class="row-head"><h3>Favourite outfits</h3></div>
+      <div id="favs" class="grid"></div>
+      <button class="primary" data-go="recommend">Get outfit ideas</button>
+    </section>
+
+    <section id="view-wardrobe" hidden>
+      <h2>Wardrobe</h2>
+      <div class="filters">
+        <input id="f-search" type="search" placeholder="Search by color, type or subtype" aria-label="Search">
+        <select id="f-type" aria-label="Type"></select>
+        <select id="f-subtype" aria-label="Subtype"></select>
+        <select id="f-color" aria-label="Color"></select>
+        <select id="f-occasion" aria-label="Occasion"></select>
+        <select id="f-season" aria-label="Season"></select>
+      </div>
+      <p id="count" class="muted"></p>
+      <div id="wardrobe" class="grid"></div>
+    </section>
+
+    <section id="view-add" hidden>
+      <h2 id="form-title">Add clothing</h2>
+      <div id="form-error" class="error" role="alert" hidden></div>
+      <div class="form" id="item-form">
+        <label>Type <select id="i-type"></select></label>
+        <label>Subtype <select id="i-subtype"></select></label>
+        <label>Color <select id="i-color"></select></label>
+        <fieldset><legend>Occasion</legend><div class="chips" id="i-occasions"></div></fieldset>
+        <fieldset><legend>Season</legend><div class="chips" id="i-seasons"></div></fieldset>
+        <div class="actions">
+          <button class="primary" id="save-btn">Add to wardrobe</button>
+          <button id="cancel-btn" hidden>Cancel edit</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-recommend" hidden>
+      <h2>Outfits</h2>
+      <div class="filters">
+        <label>Occasion <select id="r-occasion"></select></label>
+        <label>Season <select id="r-season"></select></label>
+        <button class="primary" id="gen-btn">Generate outfits</button>
+      </div>
+      <div id="r-error" class="error" role="alert" hidden></div>
+      <div id="outfits" class="grid"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
