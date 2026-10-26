@@ -49,6 +49,9 @@ add_executable(test_wardrobe_integration tests/test_wardrobe_integration.cpp)
 target_link_libraries(test_wardrobe_integration PRIVATE smart_wardrobe_domain)
 target_include_directories(test_wardrobe_integration PRIVATE include)
 add_test(NAME WardrobeIntegrationTests COMMAND test_wardrobe_integration)
+set_tests_properties(WardrobeIntegrationTests PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+)
 
 add_executable(test_json_serialization tests/test_json_serialization.cpp)
 target_link_libraries(test_json_serialization PRIVATE smart_wardrobe_domain)
