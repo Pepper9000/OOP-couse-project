@@ -9,8 +9,7 @@ public:
     std::string getType() const final;
 
 protected:
-    Bottom(int id, std::string subtype, std::string color,
-           TagList occasions, TagList seasons);
+    Bottom(int id, std::string subtype, std::string color, TagList occasions, TagList seasons);
 };
 
 class Jeans : public Bottom {

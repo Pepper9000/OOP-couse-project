@@ -1,5 +1,5 @@
 // Smart Wardrobe frontend. All recommendation logic lives in the C++ backend.
-// If Crow serves this folder itself, set API_BASE = "" (same origin).
+// Communicates with the native C++ HTTP server (or relative origin if hosted on the same host/port).
 const API_BASE = "http://localhost:18080";
 
 // Controlled values (must match the backend's accepted values)

@@ -1,0 +1,28 @@
+# Compiled executables and binary targets
+*.exe
+backend/smart_wardrobe_server.exe
+
+# Object files, static libraries, and compiler intermediates
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Local build directories
+build/
+bin/
+cmake-build-*/
+.cache/
+
+# Temporary and backup files
+*.tmp
+*.temp
+*~
+
+# Temporary test data files (preserves backend/data/demo_wardrobe.csv)
+temp_integration_test.csv
+backend/data/test_api_temp_wardrobe.csv
+backend/data/test_persist_check.csv

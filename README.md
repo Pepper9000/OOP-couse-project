@@ -573,7 +573,7 @@ The application uses a simple layered architecture.
                    ▼
 ┌──────────────────────────────────────┐
 │           C++ BACKEND API            │
-│              Crow                   │
+│        Native HTTP (Winsock)         │
 │                                      │
 │ API Routes / Request Handling        │
 └──────────────────┬───────────────────┘
@@ -642,10 +642,10 @@ The interface is small enough that a framework would add complexity without prov
 
 ```text
 C++17
-Crow
+Native Winsock HTTP Server (Crow alternative)
 ```
 
-**Crow** provides the HTTP server and REST API layer while the actual application logic remains in C++ classes.
+The backend is implemented as a **native C++ HTTP/REST server using Winsock**, providing the HTTP server and REST API layer with zero external network dependencies, while the actual application logic remains strictly in C++ domain classes. (Lightweight frameworks like **Crow** represent a conceptual alternative, but the native socket implementation keeps the build self-contained without requiring Boost or Asio).
 
 The important OOP work should not be buried inside the framework.
 
@@ -1503,6 +1503,25 @@ Example response:
 }
 ```
 
+
+### Outfit Recommendation Mapping
+
+| Frontend Request Field | C++ `RecommendationCriteria` Field | Notes |
+| :--- | :--- | :--- |
+| `occasion` | `criteria.occasion` | Case-insensitive match against item occasion tags |
+| `season` | `criteria.season` | Case-insensitive match against item season tags (or "All Season") |
+
+| Frontend Response Field | C++ `Outfit` Accessor | Description |
+| :--- | :--- | :--- |
+| `top` | `outfit.getTopDescription()` | Format: `"<Color> <Subtype>"` (e.g. `"White T-Shirt"`) |
+| `bottom` | `outfit.getBottomDescription()` | Format: `"<Color> <Subtype>"` (e.g. `"Blue Jeans"`) |
+| `shoes` | `outfit.getShoesDescription()` | Format: `"<Color> <Subtype>"` (e.g. `"White Sneakers"`) |
+| `score` | `outfit.getScore()` | Bounded integer score `0` to `100` |
+| `reason` | `outfit.getReasons()` | Array of human-readable rationale strings |
+
+### Demo Wardrobe Dataset
+Located at `backend/data/demo_wardrobe.csv`. Contains 11 curated items across Tops, Bottoms, and Shoes demonstrating casual, formal, and seasonal combinations. Can be loaded via `CSVRepository::load("backend/data/demo_wardrobe.csv", manager)` in tests and upcoming API server initializations.
+
 ---
 
 # 25. Error Handling
@@ -1712,7 +1731,7 @@ Vanilla JavaScript
 
 Backend:
 C++17
-Crow
+Native Winsock HTTP Server (Crow alternative)
 
 JSON:
 nlohmann/json
