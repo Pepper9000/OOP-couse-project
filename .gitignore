@@ -26,3 +26,4 @@ cmake-build-*/
 temp_integration_test.csv
 backend/data/test_api_temp_wardrobe.csv
 backend/data/test_persist_check.csv
+backend/data/wardrobe.csv

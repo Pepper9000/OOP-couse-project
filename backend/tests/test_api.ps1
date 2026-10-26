@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 $port = 18080
 $tempDataFile = "backend/data/test_api_temp_wardrobe.csv"
 $baseUrl = "http://127.0.0.1:$port"
+$idleClient = $null
 
 # Clean up any leftover temporary files
 if (Test-Path $tempDataFile) { Remove-Item $tempDataFile -Force }
@@ -25,8 +26,8 @@ Write-Host "[1/20] Starting server on port $port with temporary data file $tempD
 $proc = Start-Process -FilePath "backend/smart_wardrobe_server.exe" -ArgumentList "$port", "$tempDataFile" -PassThru -NoNewWindow
 
 try {
-    # 2. Wait for health check endpoint with bounded timeout
-    Write-Host "[2/20] Polling GET /api/health..."
+    # 2. Wait for health check endpoint with bounded timeout and verify GET / responds within 5 seconds
+    Write-Host "[2/20] Polling GET /api/health and verifying GET / within 5s..."
     $healthy = $false
     $timeoutSeconds = 10
     $startTime = Get-Date
@@ -47,6 +48,61 @@ try {
         throw "Server failed to respond to /api/health within $timeoutSeconds seconds."
     }
     Write-Host "       Health check OK: status=$($healthRes.status), items=$($healthRes.itemCount)"
+
+    # Regression test: verify GET / responds within 5 seconds with valid HTML
+    $rootStart = Get-Date
+    $rootRes = Invoke-WebRequest -Uri "$baseUrl/" -Method Get -TimeoutSec 5 -UseBasicParsing
+    $rootElapsed = ((Get-Date) - $rootStart).TotalSeconds
+    if ($rootRes.StatusCode -ne 200 -or -not ($rootRes.Content -like "*Smart Wardrobe*")) {
+        throw "GET / failed or did not return expected HTML. Status: $($rootRes.StatusCode)"
+    }
+    if ($rootElapsed -gt 5.0) {
+        throw "GET / took $rootElapsed seconds, exceeding 5.0 second threshold."
+    }
+    Write-Host "       GET / regression check OK: status=$($rootRes.StatusCode), elapsed=$([math]::Round($rootElapsed, 2))s"
+
+    # Regression test: raw socket request with LF-only headers to verify no hang on non-CRLF clients
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    $tcp.ReceiveTimeout = 4000
+    $tcp.SendTimeout = 4000
+    $tcp.Connect("127.0.0.1", $port)
+    $stream = $tcp.GetStream()
+    $reqBytes = [System.Text.Encoding]::ASCII.GetBytes("GET /api/health HTTP/1.1`nHost: 127.0.0.1:$port`n`n")
+    $stream.Write($reqBytes, 0, $reqBytes.Length)
+    $buf = New-Object byte[] 2048
+    $readCount = $stream.Read($buf, 0, $buf.Length)
+    $respStr = [System.Text.Encoding]::ASCII.GetString($buf, 0, $readCount)
+    $tcp.Close()
+    if ($respStr -notlike "*200 OK*") {
+        throw "Raw socket LF-header regression test failed: $respStr"
+    }
+    Write-Host "       Raw socket LF-header check OK: received valid HTTP 200 response without hang."
+
+    # Regression test: idle TCP connection should not block subsequent HTTP requests indefinitely
+    try {
+        $idleClient = New-Object System.Net.Sockets.TcpClient
+        $idleClient.ReceiveTimeout = 5000
+        $idleClient.SendTimeout = 5000
+        $idleClient.Connect("127.0.0.1", $port)
+        Start-Sleep -Milliseconds 200
+
+        $idleGetStart = Get-Date
+        $idleGetRes = Invoke-WebRequest -Uri "$baseUrl/" -Method Get -TimeoutSec 5 -UseBasicParsing
+        $idleGetElapsed = ((Get-Date) - $idleGetStart).TotalSeconds
+        if ($idleGetRes.StatusCode -ne 200 -or -not ($idleGetRes.Content -like "*Smart Wardrobe*")) {
+            throw "GET / during idle connection failed or did not return expected HTML. Status: $($idleGetRes.StatusCode)"
+        }
+        if ($idleGetElapsed -gt 5.0) {
+            throw "GET / during idle connection took $idleGetElapsed seconds, exceeding 5.0 second threshold."
+        }
+        Write-Host "       Idle-connection regression check OK: status=$($idleGetRes.StatusCode), elapsed=$([math]::Round($idleGetElapsed, 2))s"
+    } finally {
+        if ($idleClient) {
+            try { $idleClient.Close() } catch {}
+            try { $idleClient.Dispose() } catch {}
+            $idleClient = $null
+        }
+    }
 
     # 3. Confirm initial clothing list loads (seeded from demo wardrobe)
     Write-Host "[3/20] GET /api/clothes..."
@@ -295,6 +351,11 @@ try {
     Write-Host "========================================"
 } catch {
     Write-Error "Smoke test failed: $_"
+    if ($idleClient) {
+        try { $idleClient.Close() } catch {}
+        try { $idleClient.Dispose() } catch {}
+        $idleClient = $null
+    }
     if ($proc -and -not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force
     }

@@ -32,6 +32,17 @@ std::string readFileContent(const std::string& path) {
     return ss.str();
 }
 
+bool waitForSocketRead(SOCKET s, long timeoutSec, long timeoutUsec = 0) {
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(s, &fds);
+    timeval tv;
+    tv.tv_sec = timeoutSec;
+    tv.tv_usec = timeoutUsec;
+    int res = select(0, &fds, nullptr, nullptr, &tv);
+    return res > 0 && FD_ISSET(s, &fds);
+}
+
 std::string buildHttpResponse(int statusCode, const std::string& statusText,
                              const std::string& contentType, const std::string& body) {
     std::ostringstream res;
@@ -211,20 +222,45 @@ void Server::stop() {
 void Server::handleClient(uintptr_t clientSocket) {
     SOCKET s = static_cast<SOCKET>(clientSocket);
 
+    // Apply socket receive/send timeouts to guard blocking I/O calls
+    DWORD timeoutMs = 3000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+
     std::string rawRequest;
     char buffer[4096];
     int bytesReceived = 0;
 
-    // Read initial headers
-    while ((bytesReceived = recv(s, buffer, sizeof(buffer), 0)) > 0) {
+    // Read initial headers with non-blocking select readiness check
+    while (waitForSocketRead(s, 3, 0)) {
+        bytesReceived = recv(s, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) {
+            break;
+        }
         rawRequest.append(buffer, bytesReceived);
-        if (rawRequest.find("\r\n\r\n") != std::string::npos) {
+        if (rawRequest.find("\r\n\r\n") != std::string::npos ||
+            rawRequest.find("\n\n") != std::string::npos) {
+            break;
+        }
+        if (rawRequest.size() > 65536) {
             break;
         }
     }
 
+    if (rawRequest.empty()) {
+        closesocket(s);
+        return;
+    }
+
+    // Determine header end position and delimiter length (supporting CRLF and LF)
+    std::size_t headerEndPos = rawRequest.find("\r\n\r\n");
+    std::size_t headerDelimLen = 4;
+    if (headerEndPos == std::string::npos) {
+        headerEndPos = rawRequest.find("\n\n");
+        headerDelimLen = 2;
+    }
+
     // Check for Content-Length to read remainder of body if necessary
-    auto headerEndPos = rawRequest.find("\r\n\r\n");
     if (headerEndPos != std::string::npos) {
         std::string headers = rawRequest.substr(0, headerEndPos);
         // Case-insensitive search for Content-Length
@@ -236,14 +272,18 @@ void Server::handleClient(uintptr_t clientSocket) {
             std::size_t valEnd = headersLower.find_first_of("\r\n", valStart);
             if (valStart != std::string::npos) {
                 std::size_t len = (valEnd == std::string::npos) ? std::string::npos : (valEnd - valStart);
-                std::size_t expectedLen = std::stoul(headersLower.substr(valStart, len));
-                std::size_t currentBodyLen = rawRequest.size() - (headerEndPos + 4);
-                while (currentBodyLen < expectedLen) {
-                    int toRead = static_cast<int>(std::min<std::size_t>(sizeof(buffer), expectedLen - currentBodyLen));
-                    int more = recv(s, buffer, toRead, 0);
-                    if (more <= 0) break;
-                    rawRequest.append(buffer, more);
-                    currentBodyLen += more;
+                try {
+                    std::size_t expectedLen = std::stoul(headersLower.substr(valStart, len));
+                    std::size_t currentBodyLen = rawRequest.size() - (headerEndPos + headerDelimLen);
+                    while (currentBodyLen < expectedLen && waitForSocketRead(s, 3, 0)) {
+                        int toRead = static_cast<int>(std::min<std::size_t>(sizeof(buffer), expectedLen - currentBodyLen));
+                        int more = recv(s, buffer, toRead, 0);
+                        if (more <= 0) break;
+                        rawRequest.append(buffer, more);
+                        currentBodyLen += more;
+                    }
+                } catch (...) {
+                    // Ignore malformed Content-Length value
                 }
             }
         }
@@ -257,6 +297,7 @@ void Server::handleClient(uintptr_t clientSocket) {
         if (sent <= 0) break;
         totalSent += sent;
     }
+    shutdown(s, SD_SEND);
     closesocket(s);
 }
 
@@ -278,11 +319,16 @@ std::string Server::processRequest(const std::string& rawRequest) {
         return buildHttpResponse(200, "OK", "text/plain", "");
     }
 
-    // Extract body
+    // Extract body (handling CRLF or LF delimiter)
     std::string body;
     auto bodyPos = rawRequest.find("\r\n\r\n");
     if (bodyPos != std::string::npos) {
         body = rawRequest.substr(bodyPos + 4);
+    } else {
+        bodyPos = rawRequest.find("\n\n");
+        if (bodyPos != std::string::npos) {
+            body = rawRequest.substr(bodyPos + 2);
+        }
     }
 
     // Trim query parameters from path for route dispatch
